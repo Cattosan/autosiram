@@ -1,0 +1,134 @@
+#include <WiFi.h>
+#include <WiFiClient.h>
+#include <Servo.h>
+#include <MQTT.h>
+
+Servo motor1000cc;
+
+char token[] = "mqtt://e7eb5058:edaca41e3cc54180@broker.shiftr.io";
+char ssid[] = "Long Time Ago...";
+char pass[] = "BackyardiganZ[5]+";
+
+int ledgreen = 17;
+int ledred = 18;
+int ldr = 32;
+int lux;
+int servo = 5;
+int proses = 0;
+int inilimit;
+int limitproses = 100;
+char isi[30];
+char prosesc[30];
+char limit[30];
+String limits;
+char state[10];
+WiFiClient con;
+MQTTClient use;
+
+void initializing(){
+  Serial.println("Gek ngonekke. (•̀ω •́ )✧");
+  Serial.println("Gek ngonekke.. (≧∇≦)ﾉ");
+
+  Serial.println("Cek Ricek Wifi Kamu~ (❁´◡`❁)");
+  Serial.println("Masih ricek sabar... ~(>_<。)＼");
+  while(WiFi.status() != WL_CONNECTED){
+    Serial.println("Connecting... (*^▽^*)");
+    delay(500);  
+  }
+  if(WiFi.status() == WL_CONNECTED){
+    Serial.println("Horeee... Sudah konekk ヾ(•ω•`)o");
+  }
+  
+  Serial.print("Konekin MQTT~ nyaaa~~ (/≧▽≦)/\n");
+  while(!use.connect("ESP32s","e7eb5058","edaca41e3cc54180")){
+    Serial.print("=");
+    delay(500);
+  }
+  
+  Serial.println("\nHoreee sudah konekk~ \^o^/");
+  use.subscribe("/button");
+  //use.subscribe("/lux");
+  use.subscribe("/limitcahayaIlahi");
+}
+
+void lightintensifies(){
+  int tingkatCahaya = analogRead(ldr);
+  lux = ((0.009768*tingkatCahaya)+10);
+  itoa(lux,isi,10);
+  delay(500);
+  use.publish("/lux",isi);
+}
+
+void transmitter(String &topic, String &payload){
+  /*
+  if(topic == "/lux"){
+    //TO DO
+  }
+  
+  if(topic == "/limitcahayaIlahi"){
+    strcpy(limit, payload.c_str());
+    limits = payload;
+    inilimit = atoi(limit);    
+  }
+  */
+  if(topic == "/button"){
+    strcpy(state, payload.c_str());
+  }
+  
+  if(topic == "/limitcahayaIlahi"){
+    strcpy(limit, payload.c_str());
+    limits = payload;
+    inilimit = atoi(limit);
+    if(state == "1"){
+      //Serial.println(limits + " " + payload + " " + limitproses + " " + proses);
+      if(proses != 100 && proses <= 100){
+        digitalWrite(ledred, HIGH); //proses siram sedang berjalan
+        use.publish("/led", "1");
+        if(lux >= inilimit){
+          for(int i=0; i<5; i++){
+            //servo putar
+            motor1000cc.write(30);
+            delay(300);
+            motor1000cc.write(120);
+            delay(300);
+            proses = proses + 20;
+            limitproses = limitproses - 20;
+            Serial.println(limits + " " + payload + " " + limitproses + " " + proses);
+            itoa(proses,prosesc,10);
+            use.publish("/siram",prosesc);
+          }
+        }
+      }
+      else if(limitproses != 0 && proses == 100){
+        digitalWrite(ledgreen, HIGH); //proses siram selesai
+        proses = 0;
+        use.publish("/siram","0");
+        use.publish("/led", "0");
+        motor1000cc.write(0);
+        //delay(10000);
+      }
+    }
+  }
+}
+
+void setup() {
+  // put your setup code here, to run once:
+  pinMode(ledgreen, OUTPUT);
+  pinMode(ledred, OUTPUT);
+  
+  Serial.begin(9600);
+  motor1000cc.attach(servo);
+  WiFi.begin(ssid, pass);
+  use.begin("broker.shiftr.io", con);
+  use.onMessage(transmitter);
+  initializing();
+}
+
+void loop() {
+  // put your main code here, to run repeatedly:
+  lightintensifies();
+  use.loop();
+  if(!use.connected()){
+    initializing();
+  }
+}
